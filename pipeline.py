@@ -4,20 +4,22 @@ import glob
 import pickle
 import os
 
-def warp(img, src=np.float32([[596,450],[688,450],[1048,681],[276,681]])):
-    """Warp the image for top-down view"""
-    img_size = (256,512)
-    x1 = img_size[0]/4
-    x2 = img_size[0]/4*3
-    dst = np.float32([[x1,0],[x2,0],[x2,img_size[1]],[x1,img_size[1]]])
-
-    # Calculate the transform matrix
-    M = cv2.getPerspectiveTransform(src, dst)
+def warp(img, src=np.float32([[596,450],[688,450],[1048,681],[276,681]]), src_size=(1280,720), inverse=False):
+    """Warp the image for top-down view and vice versa"""
+    dst_size = (256,512)
+    x1 = dst_size[0]/4
+    x2 = dst_size[0]/4*3
+    dst = np.float32([[x1,0],[x2,0],[x2,dst_size[1]],[x1,dst_size[1]]])
 
     # Do the transform
-    warped = cv2.warpPerspective(img, M, img_size)
+    if inverse:
+        M = cv2.getPerspectiveTransform(dst, src)
+        warped = cv2.warpPerspective(img, M, src_size)
+    else:
+        M = cv2.getPerspectiveTransform(src, dst)
+        warped = cv2.warpPerspective(img, M, dst_size)
 
-    return warped, M
+    return warped
 
 def thresh_r(img):
     """Apply a binary threshold to the R channel"""
@@ -136,14 +138,39 @@ def fit_lane_line(binary_warped, nwindows=9, margin=32, minpix=20):
 
     # Generate x and y values for plotting
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0])
-    left_fitx = np.int16(left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2])
-    right_fitx = np.int16(right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2])
+    left_fitx = np.uint16(left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2])
+    right_fitx = np.uint16(right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2])
 
     out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
     out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
-    out_img[np.int16(ploty), left_fitx] = [0, 255, 255]
-    out_img[np.int16(ploty), right_fitx] = [0, 255, 255]
-    return out_img
+    out_img[np.uint16(ploty), left_fitx] = [0, 255, 255]
+    out_img[np.uint16(ploty), right_fitx] = [0, 255, 255]
+    return left_fit, right_fit, out_img
+
+def project_on_road_back(undist, left_fit, right_fit, warped_size=(512,512)):
+    """Project the calculated lane markings onto the undistorted source image"""
+    # Generate x and y values for plotting
+    ploty = np.linspace(0, warped_size[1]-1, warped_size[1])
+    left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+    right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+
+    # Create an image to draw the lines on
+    warp_zero = np.zeros(warped_size, dtype=np.uint8)
+    color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
+
+    # Recast the x and y points into usable format for cv2.fillPoly()
+    pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
+    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
+    pts = np.hstack((pts_left, pts_right))
+
+    # Draw the lane onto the warped blank image
+    cv2.fillPoly(color_warp, np.int_([pts]), (0,255, 0))
+
+    # Warp the blank back to original image space using inverse perspective matrix (Minv)
+    newwarp = warp(color_warp, inverse=True)
+    # Combine the result with the original image
+    result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
+    return result
 
 def load_calibration_params():
     cal_file = open('calibration.pkl','rb')
@@ -160,7 +187,7 @@ def output_test_images():
         img = cv2.imread(fname)
         undist = cv2.undistort(img, mtx, dist, None, mtx)
         cv2.imwrite('output_images/undistorted_'+os.path.basename(fname), undist)
-        warped, M = warp(undist)
+        warped = warp(undist)
         cv2.imwrite('output_images/warped_'+os.path.basename(fname), warped)
         binary_r = thresh_r(warped)
         binary_sobel_l, binary_sobel_r = thresh_sobel(warped)
@@ -168,7 +195,9 @@ def output_test_images():
         cv2.imwrite('output_images/thresholded_'+os.path.basename(fname), thresholded)
         combined = combine_thresholds(binary_r, binary_sobel_l, binary_sobel_r)
         cv2.imwrite('output_images/combined_'+os.path.basename(fname), combined)
-        fitted = fit_lane_line(combined)
+        left_fit, right_fit, fitted = fit_lane_line(combined)
         cv2.imwrite('output_images/fitted_'+os.path.basename(fname), fitted)
+        result = project_on_road_back(undist, left_fit, right_fit)
+        cv2.imwrite('output_images/result_'+os.path.basename(fname), result)
 
 output_test_images()
