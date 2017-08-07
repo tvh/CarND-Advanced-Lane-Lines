@@ -38,7 +38,10 @@ def thresh_sobel(img):
     return cleanup_threshold(sobel_binary_l), cleanup_threshold(sobel_binary_r)
 
 def cleanup_threshold(binary):
-    """Cleans up a given thresholded channel. This assumes sharp lane markings"""
+    """
+    Cleans up a given thresholded channel.
+    This removes many false positives by removing wide finds
+    """
     height, width = binary.shape[:2]
     trans_m_l = np.float32([[1, 0, 12], [0, 1, 0]])
     trans_m_r = np.float32([[1, 0, -12], [0, 1, 0]])
@@ -47,7 +50,11 @@ def cleanup_threshold(binary):
     return binary-shifted_binary_l-shifted_binary_r
 
 def combine_thresholds(binary_r, binary_sobel_l, binary_sobel_r):
-    """Combine the calculated thresholds"""
+    """
+    Combine the calculated thresholds
+    This is done by adding up the different channels with
+    horizontally shifted versions of each other.
+    """
     height, width = binary_r.shape[:2]
     trans_m_l = np.float32([[1, 0, 12], [0, 1, 0]])
     shifted_sobel_l = cv2.warpAffine(binary_sobel_l, trans_m_l, (width, height))
