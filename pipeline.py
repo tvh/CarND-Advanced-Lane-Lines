@@ -20,19 +20,21 @@ def warp(img, src=np.float32([[596,450],[688,450],[1048,681],[276,681]])):
     return warped, M
 
 def thresh_r(img):
-    """Apply a binary threshold to the R channel"""
+    """Apply a binary thresholds to the R channel"""
     b, g, r = cv2.split(img)
-    binary = cv2.adaptiveThreshold(r, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 255, -70)
-    return binary
+    binary_r = cv2.adaptiveThreshold(r, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 255, -70)
+    return binary_r
 
 def thresh_sobel(img):
-    """Apply a binary threshold on the sobel operator"""
     b, g, r = cv2.split(img)
     sobelx = cv2.Sobel(cv2.blur(r, (25,17)), cv2.CV_64F, 1, 0)
-    abs_sobelx = np.absolute(sobelx)
-    scaled_sobel = np.uint8(255*abs_sobelx/np.max(abs_sobelx))
-    sobel_binary = cv2.adaptiveThreshold(scaled_sobel, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 255, -40)
-    return sobel_binary
+    min_sobel = np.min(sobelx)
+    max_sobel = np.max(sobelx)
+    scaled_sobel_l = np.uint8(255*(sobelx-min_sobel)/(max_sobel-min_sobel))
+    scaled_sobel_r = 255-scaled_sobel_l
+    sobel_binary_l = cv2.adaptiveThreshold(scaled_sobel_l, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 255, -30)
+    sobel_binary_r = cv2.adaptiveThreshold(scaled_sobel_r, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 255, -30)
+    return sobel_binary_l, sobel_binary_r
 
 def load_calibration_params():
     cal_file = open('calibration.pkl','rb')
@@ -52,8 +54,8 @@ def output_test_images():
         warped, M = warp(undist)
         cv2.imwrite('output_images/warped_'+os.path.basename(fname), warped)
         binary_r = thresh_r(warped)
-        binary_sobel = thresh_sobel(warped)
-        thresholded = cv2.merge([np.zeros_like(binary_r), binary_r, binary_sobel])
+        binary_sobel_l, binary_sobel_r = thresh_sobel(warped)
+        thresholded = cv2.merge([binary_sobel_l, binary_r, binary_sobel_r])
         cv2.imwrite('output_images/thresholded_'+os.path.basename(fname), thresholded)
 
 output_test_images()
