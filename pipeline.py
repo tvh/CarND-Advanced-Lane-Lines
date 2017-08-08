@@ -69,7 +69,14 @@ def combine_thresholds(binary_r, binary_sobel_l, binary_sobel_r):
     res[combined>150]=255
     return res
 
-def fit_lane_line(binary_warped, nwindows=9, margin=32, minpix=20, visualize=False):
+def fit_lane_line(
+        binary_warped,
+        nwindows=9,
+        margin=32,
+        minpix=20,
+        visualize=False,
+        min_y_dist=100
+):
     """
     Finds the lane lines and fits a curve to it.
     This is largely based on the function presented in the course.
@@ -139,8 +146,14 @@ def fit_lane_line(binary_warped, nwindows=9, margin=32, minpix=20, visualize=Fal
     righty = nonzeroy[right_lane_inds]
 
     # Fit a second order polynomial to each
-    left_fit = np.polyfit(lefty, leftx, 2)
-    right_fit = np.polyfit(righty, rightx, 2)
+    if len(lefty)>=2 and np.max(lefty)-np.min(lefty) > min_y_dist:
+        left_fit = np.polyfit(lefty, leftx, 2)
+    else:
+        left_fit = None
+    if len(righty)>=2 and np.max(righty)-np.min(righty) > min_y_dist:
+        right_fit = np.polyfit(righty, rightx, 2)
+    else:
+        right_fit = None
 
     if visualize:
         # Generate x and y values for plotting
@@ -218,7 +231,11 @@ def annotate_video(src, dst):
 
     # Define the function locally to that we can share the calibration parameters.
     # TODO: Lookup if Currying is possible in python.
+    prev_left_fit = None
+    prev_right_fit = None
     def process_image(img):
+        nonlocal prev_left_fit
+        nonlocal prev_right_fit
         # The pipeline works on BGR images
         color_corrected = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         undist = cv2.undistort(color_corrected, mtx, dist, None, mtx)
@@ -228,7 +245,19 @@ def annotate_video(src, dst):
         thresholded = cv2.merge([binary_sobel_l, binary_r, binary_sobel_r])
         combined = combine_thresholds(binary_r, binary_sobel_l, binary_sobel_r)
         left_fit, right_fit, _ = fit_lane_line(combined)
+        # Make sure we have a mapping if we lose track for a short time
+        if left_fit==None:
+            left_fit = prev_left_fit
+        if right_fit==None:
+            right_fit = prev_right_fit
+        # Weighted average
+        if prev_left_fit!=None:
+            left_fit = (left_fit+prev_left_fit)/2
+        if prev_right_fit!=None:
+            right_fit = (right_fit+prev_right_fit)/2
         result = project_on_road_back(undist, left_fit, right_fit)
+        prev_left_fit = left_fit
+        prev_right_fit = right_fit
         return cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
 
     clip_in = VideoFileClip(src)
