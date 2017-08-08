@@ -75,7 +75,9 @@ def fit_lane_line(
         margin=32,
         minpix=20,
         visualize=False,
-        min_y_dist=100
+        min_y_dist=100,
+        ym_per_pix = 3.0/54, # meters per pixel in y dimension
+        xm_per_pix = 3.7/128 # meters per pixel in x dimension
 ):
     """
     Finds the lane lines and fits a curve to it.
@@ -145,27 +147,34 @@ def fit_lane_line(
     rightx = nonzerox[right_lane_inds]
     righty = nonzeroy[right_lane_inds]
 
+    ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0])
+    y_eval = np.max(ploty)
     # Fit a second order polynomial to each
     if len(lefty)>=2 and np.max(lefty)-np.min(lefty) > min_y_dist:
         left_fit = np.polyfit(lefty, leftx, 2)
+        left_fitx = np.uint16(left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2])
+        left_fit_cr = np.polyfit(ploty*ym_per_pix, left_fitx*xm_per_pix, 2)
+        left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
     else:
         left_fit = None
+        left_curverad = None
     if len(righty)>=2 and np.max(righty)-np.min(righty) > min_y_dist:
         right_fit = np.polyfit(righty, rightx, 2)
+        right_fitx = np.uint16(right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2])
+        right_fit_cr = np.polyfit(ploty*ym_per_pix, right_fitx*xm_per_pix, 2)
+        right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
     else:
         right_fit = None
+        right_curverad = None
 
+    # Generate x and y values for plotting
     if visualize:
-        # Generate x and y values for plotting
-        ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0])
-        left_fitx = np.uint16(left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2])
-        right_fitx = np.uint16(right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2])
-
         out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
         out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
         out_img[np.uint16(ploty), left_fitx] = [0, 255, 255]
         out_img[np.uint16(ploty), right_fitx] = [0, 255, 255]
-    return left_fit, right_fit, out_img
+
+    return left_fit, right_fit, left_curverad, right_curverad, out_img
 
 def project_on_road_back(undist, left_fit, right_fit, warped_size=(512,512)):
     """Project the calculated lane markings onto the undistorted source image"""
@@ -220,7 +229,7 @@ def output_test_images():
         cv2.imwrite('output_images/thresholded_'+os.path.basename(fname), thresholded)
         combined = combine_thresholds(binary_r, binary_sobel_l, binary_sobel_r)
         cv2.imwrite('output_images/combined_'+os.path.basename(fname), combined)
-        left_fit, right_fit, fitted = fit_lane_line(combined, visualize=True)
+        left_fit, right_fit, left_curverad, right_curverad, fitted = fit_lane_line(combined, visualize=True)
         cv2.imwrite('output_images/fitted_'+os.path.basename(fname), fitted)
         result = project_on_road_back(undist, left_fit, right_fit)
         cv2.imwrite('output_images/result_'+os.path.basename(fname), result)
@@ -244,18 +253,32 @@ def annotate_video(src, dst):
         binary_sobel_l, binary_sobel_r = thresh_sobel(warped)
         thresholded = cv2.merge([binary_sobel_l, binary_r, binary_sobel_r])
         combined = combine_thresholds(binary_r, binary_sobel_l, binary_sobel_r)
-        left_fit, right_fit, _ = fit_lane_line(combined)
+        left_fit, right_fit, left_curverad, right_curverad, _ = fit_lane_line(combined)
         # Make sure we have a mapping if we lose track for a short time
         if left_fit==None:
             left_fit = prev_left_fit
+            left_current = False
+        else:
+            left_current = True
         if right_fit==None:
             right_fit = prev_right_fit
+            right_current = False
+        else:
+            right_current = True
         # Weighted average
         if prev_left_fit!=None:
             left_fit = (left_fit+prev_left_fit)/2
         if prev_right_fit!=None:
             right_fit = (right_fit+prev_right_fit)/2
         result = project_on_road_back(undist, left_fit, right_fit)
+        if left_current:
+            cv2.putText(result, "Left radius: {0:.1f}m".format(left_curverad), (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
+        else:
+            cv2.putText(result, "Left radius: unknown", (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
+        if right_current:
+            cv2.putText(result, "Right radius: {0:.1f}m".format(right_curverad), (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
+        else:
+            cv2.putText(result, "Right radius: unknown", (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
         prev_left_fit = left_fit
         prev_right_fit = right_fit
         return cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
