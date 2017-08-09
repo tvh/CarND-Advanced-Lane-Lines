@@ -122,7 +122,24 @@ After calculating the fitted lane lines, I use `warp` to project the result back
 
 ## Pipeline (video)
 
-I used the pipeline described above to find the lane in the project video: ![project_video](out_project_video.mp4)
-I also tried running it on the challenge video, but got very mixed results: ![challenge_video](out_challenge_video.mp4)
+I used the pipeline described above to find the lane in the project video: ![out_project_video.mp4](out_project_video.mp4)
+I also tried running it on the challenge video, but got very mixed results: ![out_challenge.mp4](out_challenge_video.mp4)
 
 ## Discussion
+
+The pipeline works fairly well on the project video, but breaks down quickly on slightly different input.
+This is due to the hand-tuned thresholds used.
+To improve on this, one could use different thresholds to generate the lane lines.
+If the threshold is too high, the result just won't find anything.
+If the threshold is too low, the output would be empty after the cleanup step as the found regions would be too wide.
+In both these cases, the results could be discarded via some sort of voting mechanism.
+The parameter of this vote could be chosen to generate sharp lane markings.
+
+It also gets distracted easily, as can be seen in ![out_challenge.mp4](out_challenge_video.mp4).
+I tried to use a previous match to inform the next, but haven't had any success.
+I was also surprised not to get any performance benefits by doing so.
+To fix this issue, one would have to look at the individual images where it gets sumped, but I haven't done that yet.
+
+Another issue is that the pipeline as is makes a lot of assumptions about how a lane line has to look.
+In the `herder_challenge_video.mp4`, there is a double lane line.
+Since I throw out wide segments, this would be a challenge, as it could decrease the quality of the other matches again.
