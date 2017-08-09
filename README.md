@@ -80,7 +80,7 @@ I then remove all detected regions that are too wide to represent a lane line.
 This is easily done by subtracting horizontally shifted versions of the found binary images.
 Afterwards I am left with the following for the 3 channels:
 
-![thresholded](output_images/warped_test5.jpg)
+![thresholded](output_images/thresholded_test5.jpg)
 
 As you can see, not all masks are always successful.
 To finally find the real lane line pixels, I use a majority vore between the 3 masks.
