@@ -91,10 +91,38 @@ This means I can just translate them back onto the color threshold masks, add th
 
 ### 4. Finding lane line pixels and fitting curve
 
+To find the lane line pixels for the left and right lane, I first generate a histogram of all the the pixels in the lower quarter of the image.
+Since the thresholging yields fairly sharp lane lines, I apply a gaussian blur beforehand.
+With this, I can almost always find a unique starting point for the left and right lane.
+
+After establishing the starting point, I use a windowed search from the bottom to the top to collect all the lane line pixels.
+Finally I use `np.polyfit` to fit a polinomial with the following result:
+
+![fitted](output_images/fitted_test5.jpg)
+
 ### 5. Road curvature and vehicle position
+
+With the lines fitted, I use the technique presented at http://www.intmath.com/applications-differentiation/8-radius-curvature.php and implemented in the course to get the lane line curvature.
+To convert from pixel space to real-world space, I used the following mapping:
+
+```
+ym_per_pix = 3.0/54  # meters per pixel in y dimension
+xm_per_pix = 3.7/128 # meters per pixel in x dimension
+```
+
+To calculate the distance from the lane center, I take the average distance from left and right track.
+
+Code for this step is in `find_radii_and_cte`.
 
 ### 6. Plotting lane back on original image
 
+After calculating the fitted lane lines, I use `warp` to project the result back on the original (undistorted) image.
+
+![result](output_images/result_test5.jpg)
+
 ## Pipeline (video)
+
+I used the pipeline described above to find the lane in the project video: ![project_video](out_project_video.mp4)
+I also tried running it on the challenge video, but got very mixed results: ![challenge_video](out_challenge_video.mp4)
 
 ## Discussion
