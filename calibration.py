@@ -49,10 +49,8 @@ output = open('calibration.pkl', 'wb')
 pickle.dump({'mtx': mtx, 'dist': dist}, output)
 output.close()
 
-# transform the test images and save
-test_images = glob.glob('./test_images/*.jpg')
-
-for fname in test_images:
+# transform the calibration images and save
+for fname in images:
     img = cv2.imread(fname)
     undist = cv2.undistort(img, mtx, dist, None, mtx)
     cv2.imwrite('output_images/undistorted_'+os.path.basename(fname), undist)
